@@ -14,6 +14,8 @@ class MatchaGame:
         pygame.init()
         pygame.mixer.init()
 
+        self.music_on = False
+
         self.player_name = ""
         self.name_input = ""
         self.input_active = True
@@ -158,6 +160,17 @@ class MatchaGame:
         except Exception as e:
             print(f"Error loading glass sound: {e}")
             self.glass_sound = None
+            # Later in the method:
+        try:
+            music_path = os.path.join(self.base_dir, 'assets', 'background_music.mp3')
+            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.set_volume(0.4)  # 40% volume
+            self.music_on = True
+            print(f"Music loaded from: {music_path}")
+        except Exception as e:
+            print(f"Error loading background music: {e}")
+            self.music_on = False  #
+
 
     def draw_name_input_screen(self):
         self.screen.fill((230, 230, 250))
@@ -567,20 +580,30 @@ class MatchaGame:
         self.message = "Start by adding matcha powder to the bowl!"
         self.message_time = time.time()
 
-
     def run(self):
-        self.game_state = "name_input"  # Force start with name input
+        self.game_state = "start_screen"  # Start with the start screen instead of name_input
+        self.play_music()
 
         while self.running:
-            if self.game_state == "name_input":
+            if self.game_state == "start_screen":
+                self.draw_start_screen()
+                # Handle events for start screen
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        self.running = False
+                    elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                        self.game_state = "name_input"  # Transition to name input after any key/click
+            elif self.game_state == "name_input":
                 self.draw_name_input_screen()
+                self.handle_events()
             elif self.game_state == "game_screen":
                 self.update_game_state()
                 self.draw_game_screen()
+                self.handle_events()
 
-            self.handle_events()
             pygame.display.flip()
             self.clock.tick(60)
+
     def draw_start_screen(self):
         # Draw background
         if self.background_image:
@@ -588,16 +611,40 @@ class MatchaGame:
         else:
             self.screen.fill((230, 230, 250))  # Light background
 
-        # Draw title
+        # Load and display logo
+        try:
+            logo_path = os.path.join(self.base_dir, 'assets', 'logo.png')
+            print(f"Looking for logo at: {logo_path}")
+
+            if os.path.exists(logo_path):
+                print(f"Logo file exists: {logo_path}")
+                logo_image = pygame.image.load(logo_path)
+
+                # Scale logo to appropriate size
+                logo_width = 200
+                logo_height = 200
+                logo_image = pygame.transform.scale(logo_image, (logo_width, logo_height))
+
+                # Position the logo at the top center
+                logo_x = self.SCREEN_WIDTH // 2 - logo_width // 2
+                logo_y = 100
+                self.screen.blit(logo_image, (logo_x, logo_y))
+            else:
+                print(f"Logo file not found: {logo_path}")
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+
+        # Draw "Matcha Cozy" title
         font_large = pygame.font.SysFont(None, 72)
-        title = font_large.render("Matcha Maker", True, (0, 100, 0))
-        self.screen.blit(title, (self.SCREEN_WIDTH // 2 - title.get_width() // 2, 200))
+        title = font_large.render("Matcha Cozy", True, (0, 100, 0))
+        self.screen.blit(title, (self.SCREEN_WIDTH // 2 - title.get_width() // 2, 320))
 
         # Draw "press any key" message (blinking)
         if pygame.time.get_ticks() % 1000 < 800:  # Blink effect
             font = pygame.font.SysFont(None, 36)
             text = font.render("Press any key to start", True, (0, 0, 0))
-            self.screen.blit(text, (self.SCREEN_WIDTH // 2 - text.get_width() // 2, 350))
+            self.screen.blit(text, (self.SCREEN_WIDTH // 2 - text.get_width() // 2, 400))
+
 
     def draw_game_screen(self):
         # Draw background
@@ -727,6 +774,17 @@ class MatchaGame:
             color=(76, 175, 80),
             hover_color=(56, 142, 60),
             font_size=36
+        )
+
+        self.music_button = Button(
+            x=self.SCREEN_WIDTH - 60,
+            y=50,
+            width=50,
+            height=50,
+            text="🎵",
+            color=(76, 175, 80) if self.music_on else (150, 150, 150),
+            hover_color=(56, 142, 60) if self.music_on else (120, 120, 120),
+            font_size=24
         )
     def create_matcha_powder_animation(self):
         self.matcha_particles = []
@@ -1051,5 +1109,26 @@ class MatchaGame:
             hover_color=(56, 142, 60),
             font_size=36
         )
+
+    def play_music(self):
+        if hasattr(self, 'music_on') and self.music_on:
+            try:
+                pygame.mixer.music.play(-1)  # -1 means loop indefinitely
+            except Exception as e:
+                print(f"Error playing music: {e}")
+
+    def stop_music(self):
+        try:
+            pygame.mixer.music.stop()
+        except Exception as e:
+            print(f"Error stopping music: {e}")
+
+    def toggle_music(self):
+        if hasattr(self, 'music_on'):
+            self.music_on = not self.music_on
+            if self.music_on:
+                self.play_music()
+            else:
+                self.stop_music()
 
 

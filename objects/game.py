@@ -369,7 +369,11 @@ class MatchaGame:
             if event.type == pygame.QUIT:
                 self.running = False
                 return
-            # Add this inside the game screen event handling section
+
+            # Get mouse position at the beginning of the function
+            mouse_pos = pygame.mouse.get_pos()
+
+            # Handle game over or recipe complete
             if self.game_over or self.recipe_complete:
                 if hasattr(self, 'restart_button'):
                     self.restart_button.update(mouse_pos)
@@ -377,6 +381,7 @@ class MatchaGame:
                         if self.restart_button.is_clicked(mouse_pos):
                             self.restart_game()
                             return
+
             # Handle name input screen events
             if self.game_state == "name_input":
                 if event.type == pygame.KEYDOWN:
@@ -396,8 +401,6 @@ class MatchaGame:
 
             # Handle game screen events
             if self.game_state == "game_screen":
-                mouse_pos = pygame.mouse.get_pos()
-
                 # Update button states
                 if hasattr(self, 'pour_button'):
                     self.pour_button.update(mouse_pos)
@@ -479,6 +482,7 @@ class MatchaGame:
                                 self.message = "Almond milk added! Mix again to complete."
                                 self.message_time = time.time()
                                 return
+
     def update_game_state(self):
         # Update animations, timers, etc.
         self.update_pour_animation()
@@ -491,9 +495,24 @@ class MatchaGame:
             self.time_left = max(0, self.time_left - 1 / 60)  # 1/60 second per frame at 60 FPS
             if self.time_left <= 0:
                 self.game_over = True
-                self.message = f"Game Over! Your score: {self.score}"
+                # Save final score only when time runs out
+                if self.score > 0 and hasattr(self, 'player_name') and self.player_name:
+                    print(f"Game over! Saving final score for {self.player_name}: {self.score}")
+                    self.save_score()
+                self.message = ""
                 self.message_time = float('inf')  # Keep the message visible
 
+                # Create restart button
+                self.restart_button = Button(
+                    x=self.SCREEN_WIDTH // 2 - 75,
+                    y=500,
+                    width=150,
+                    height=60,
+                    text="New Game",
+                    color=(76, 175, 80),
+                    hover_color=(56, 142, 60),
+                    font_size=36
+                )
     def update_pour_animation(self):
         if self.pouring:
             current_time = time.time()
@@ -516,10 +535,6 @@ class MatchaGame:
 
     def reset_game(self):
         # Sauvegarder le score avant de reset
-        if self.score > 0 and hasattr(self, 'player_name') and self.player_name:
-            print(f"Saving score for {self.player_name}: {self.score}")
-            self.save_score()
-
         # Arrêter tous les sons
         if hasattr(self, 'whisk_sound') and self.whisk_sound:
             self.whisk_sound.stop()
@@ -591,15 +606,11 @@ class MatchaGame:
         else:
             self.screen.fill(self.WHITE)
 
-        if self.game_over or self.recipe_complete:
-            if hasattr(self, 'restart_button'):
-                self.restart_button.draw(self.screen)
-
         # Draw all game elements
         self.bowl.draw(self.screen)
         for ingredient in self.ingredients:
             ingredient.draw(self.screen)
-        self.whisk.draw(self.screen)  # Draw whisk only once
+        self.whisk.draw(self.screen)
         self.draw_matcha_animation()
         self.draw_water_animation()
         self.draw_milk_animation()
@@ -610,22 +621,26 @@ class MatchaGame:
         else:
             self.glass.draw(self.screen)
 
-        if self.is_fully_mixed and not self.is_poured:
-            self.pour_button.draw(self.screen)
+        # Draw pour button only when ready to pour AND game is not over
+        if self.is_fully_mixed and not self.is_poured and not self.game_over:
+            if hasattr(self, 'pour_button'):
+                self.pour_button.draw(self.screen)
 
-        if self.is_poured and self.recipe_complete:
-            self.next_button.draw(self.screen)
+        # Draw next button only when recipe is complete AND game is not over
+        if self.is_poured and self.recipe_complete and not self.game_over:
+            if hasattr(self, 'next_button'):
+                self.next_button.draw(self.screen)
 
-        # Draw "next matcha" button if poured
-        if self.is_poured:
-            self.next_button.draw(self.screen)
+        # Draw restart button only when game is over
+        if self.game_over and hasattr(self, 'restart_button'):
+            self.restart_button.draw(self.screen)
 
         # Draw pouring animation
         if self.pouring:
             self.draw_pouring_animation()
 
-        # Draw message
-        if self.message:
+        # Draw message (don't display recipe instructions when game is over)
+        if self.message and (not self.game_over or "Game Over" in self.message):
             message_text = self.font.render(self.message, True, self.BLACK)
             self.screen.blit(message_text, (self.SCREEN_WIDTH // 2 - message_text.get_width() // 2, 520))
 
@@ -634,7 +649,6 @@ class MatchaGame:
         time_text = self.small_font.render(f"Time: {int(self.time_left)}", True, self.BLACK)
         self.screen.blit(score_text, (10, 10))
         self.screen.blit(time_text, (self.SCREEN_WIDTH - 100, 10))
-
     def setup_buttons(self):
         class Button:
             def __init__(self, x, y, width, height, text, color, hover_color, font_size=32):

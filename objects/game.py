@@ -5,6 +5,7 @@ import random
 from objects.bowl import Bowl
 from objects.whisk import WhiskTool
 from objects.button import Button
+import json
 
 
 class MatchaGame:
@@ -13,6 +14,10 @@ class MatchaGame:
         pygame.init()
         pygame.mixer.init()
 
+        self.player_name = ""
+        self.name_input = ""
+        self.input_active = True
+        self.game_state = "name_input"
         # Constants
         self.SCREEN_WIDTH = 800
         self.SCREEN_HEIGHT = 600
@@ -20,6 +25,7 @@ class MatchaGame:
         self.BOWL_Y = 300
         self.GLASS_X = 600
         self.GLASS_Y = 350
+
 
         # Matcha animation attributes
         self.matcha_particles = []
@@ -42,10 +48,6 @@ class MatchaGame:
         self.screen = pygame.display.set_mode((self.SCREEN_WIDTH, self.SCREEN_HEIGHT))
         pygame.display.set_caption("Matcha Making Game")
 
-        # Rest of your initialization code...
-        # seconds
-        # seconds
-        # Colors
         self.WHITE = (255, 255, 255)
         self.BLACK = (0, 0, 0)
         self.GREEN = (75, 139, 59)
@@ -55,7 +57,10 @@ class MatchaGame:
 
 
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+        print(f"Game initialized. Base directory: {self.base_dir}")
+        if not os.path.exists(self.base_dir):
+            print(f"Creating base directory: {self.base_dir}")
+            os.makedirs(self.base_dir)
         # Game state
         self.game_state = "start_screen"
         self.running = True
@@ -141,6 +146,93 @@ class MatchaGame:
         except Exception as e:
             print(f"Error loading milk sound: {e}")
             self.milk_sound = None
+        try:
+            pour_sound_path = os.path.join(self.base_dir, 'assets', 'pour.mp3')
+            self.pour_sound = pygame.mixer.Sound(pour_sound_path)
+        except Exception as e:
+            print(f"Error loading pour sound: {e}")
+            self.pour_sound = None
+        try:
+            glass_sound_path = os.path.join(self.base_dir, 'assets', 'glass.mp3')
+            self.glass_sound = pygame.mixer.Sound(glass_sound_path)  # Correction ici
+        except Exception as e:
+            print(f"Error loading glass sound: {e}")
+            self.glass_sound = None
+
+    def draw_name_input_screen(self):
+        self.screen.fill((230, 230, 250))
+
+        # Draw title
+        title = self.font.render("Enter Your Name", True, (0, 100, 0))
+        title_rect = title.get_rect(center=(self.SCREEN_WIDTH // 2, 200))
+        self.screen.blit(title, title_rect)
+
+        # Draw input box
+        input_box = pygame.Rect(self.SCREEN_WIDTH // 2 - 100, 300, 200, 50)
+        pygame.draw.rect(self.screen, (255, 255, 255), input_box)
+        pygame.draw.rect(self.screen, (0, 100, 0), input_box, 2)
+
+        # Draw current input
+        input_surface = self.font.render(self.name_input, True, (0, 0, 0))
+        input_rect = input_surface.get_rect(center=input_box.center)
+        self.screen.blit(input_surface, input_rect)
+
+        # Draw instruction
+        if pygame.time.get_ticks() % 1000 < 500:  # Blinking effect
+            instruction = self.small_font.render("Press ENTER to start", True, (0, 0, 0))
+            instruction_rect = instruction.get_rect(center=(self.SCREEN_WIDTH // 2, 400))
+            self.screen.blit(instruction, instruction_rect)
+
+    def save_score(self):
+        try:
+            # Debug statements
+            print(f"Player Name: {self.player_name}")
+            print(f"Score: {self.score}")
+
+            # Skip if no valid score
+            if not hasattr(self, 'player_name') or not self.player_name or self.score <= 0:
+                print("No valid score to save")
+                return
+
+            # Get project root directory (where main.py is)
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            scores_file = os.path.join(project_dir, 'scores.json')
+            print(f"\nSaving score to: {scores_file}")
+
+            # Initialize scores list
+            scores = []
+
+            # Load existing scores
+            if os.path.exists(scores_file):
+                try:
+                    with open(scores_file, 'r', encoding='utf-8') as f:
+                        scores = json.load(f)
+                    print(f"Loaded {len(scores)} existing scores")
+                except json.JSONDecodeError:
+                    print("Invalid JSON file, starting fresh")
+                except Exception as e:
+                    print(f"Error reading scores: {str(e)}")
+
+            # Add new score
+            score_data = {
+                "player_name": self.player_name,
+                "score": self.score,
+                "date": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            scores.append(score_data)
+            print(f"Adding score: {score_data}")
+
+            # Save the updated scores
+            try:
+                with open(scores_file, 'w', encoding='utf-8') as f:
+                    json.dump(scores, f, indent=4, ensure_ascii=False)
+                print(f"Score saved successfully to: {scores_file}")
+                print(f"File size: {os.path.getsize(scores_file)} bytes")
+            except Exception as e:
+                print(f"Error writing scores: {str(e)}")
+
+        except Exception as e:
+            print(f"Error in save_score: {str(e)}")
 
     def setup_ingredients(self):
         class Ingredient:
@@ -273,85 +365,120 @@ class MatchaGame:
         self.glass = Glass(self.GLASS_X, self.GLASS_Y, width=80, height=120)
 
     def handle_events(self):
-        mouse_pos = pygame.mouse.get_pos()
-
-        if hasattr(self, 'pour_button'):
-            self.pour_button.update(mouse_pos)
-        if hasattr(self, 'next_button'):
-            self.next_button.update(mouse_pos)
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
                 return
-            elif event.type == pygame.KEYDOWN and self.game_state == "start_screen":
-                self.game_state = "game_screen"
+            # Add this inside the game screen event handling section
+            if self.game_over or self.recipe_complete:
+                if hasattr(self, 'restart_button'):
+                    self.restart_button.update(mouse_pos)
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        if self.restart_button.is_clicked(mouse_pos):
+                            self.restart_game()
+                            return
+            # Handle name input screen events
+            if self.game_state == "name_input":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        if self.name_input.strip():  # Only proceed if name isn't empty
+                            self.player_name = self.name_input
+                            self.game_state = "game_screen"
+                            self.message = "Start by adding matcha powder to the bowl!"
+                            self.message_time = time.time()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.name_input = self.name_input[:-1]
+                    else:
+                        # Limit name length to 20 characters
+                        if len(self.name_input) < 20:
+                            self.name_input += event.unicode
                 return
-            elif event.type == pygame.MOUSEBUTTONDOWN and self.game_state == "game_screen":
-                # Handle whisk click first
-                if self.whisk.is_clicked(mouse_pos) and self.whisk.visible:
-                    # Stop milk sound if it's playing when mixing after adding milk
-                    if hasattr(self, 'milk_sound') and self.milk_sound and self.has_almond_milk:
+
+            # Handle game screen events
+            if self.game_state == "game_screen":
+                mouse_pos = pygame.mouse.get_pos()
+
+                # Update button states
+                if hasattr(self, 'pour_button'):
+                    self.pour_button.update(mouse_pos)
+                if hasattr(self, 'next_button'):
+                    self.next_button.update(mouse_pos)
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    # Stop all sounds before each new action
+                    if hasattr(self, 'whisk_sound') and self.whisk_sound:
+                        self.whisk_sound.stop()
+                    if hasattr(self, 'milk_sound') and self.milk_sound:
                         self.milk_sound.stop()
 
-                    if hasattr(self, 'whisk_sound') and self.whisk_sound:
-                        self.whisk_sound.play()
-
-                    if self.has_hot_water and not self.is_mixed_with_water:
-                        self.is_mixed_with_water = True
-                        self.bowl.is_stirred = True
-                        self.message = "Well mixed! Add almond milk now."
-                        self.message_time = time.time()
-                    elif self.has_almond_milk and not self.is_fully_mixed:
-                        self.is_fully_mixed = True
-                        self.bowl.is_stirred = True
-                        self.message = "Perfect! Your matcha is ready to pour."
-                        self.message_time = time.time()
-                    return
-
-                if self.is_poured and hasattr(self, 'next_button'):
-                    if self.next_button.is_clicked(mouse_pos):
-                        print("Next button clicked")  # Debug print
-                        self.score += 1
-                        self.reset_game()
+                    # Handle whisk
+                    if self.whisk.is_clicked(mouse_pos) and self.whisk.visible:
+                        if self.has_hot_water and not self.is_mixed_with_water:
+                            if hasattr(self, 'whisk_sound') and self.whisk_sound:
+                                self.whisk_sound.play()
+                            self.is_mixed_with_water = True
+                            self.bowl.is_stirred = True
+                            self.message = "Well mixed! Add almond milk now."
+                            self.message_time = time.time()
+                        elif self.has_almond_milk and not self.is_fully_mixed:
+                            if hasattr(self, 'whisk_sound') and self.whisk_sound:
+                                self.whisk_sound.play()
+                            self.is_fully_mixed = True
+                            self.bowl.is_stirred = True
+                            self.message = "Perfect! Your matcha is ready to pour."
+                            self.message_time = time.time()
                         return
 
-                # Handle ingredient clicks
-                for ingredient in self.ingredients:
-                    if ingredient.is_clicked(mouse_pos) and ingredient.visible:
-                        if ingredient.name == "Matcha" and not self.has_matcha:
-                            print("Matcha clicked")  # Debug print
-                            self.create_matcha_powder_animation()
-                            self.bowl.contents.append('matcha')
-                            self.has_matcha = True
-                            self.message = "Matcha added! Now add hot water."
+                    # Handle pour button
+                    if self.is_fully_mixed and not self.is_poured:
+                        if self.pour_button.is_clicked(mouse_pos):
+                            if hasattr(self, 'glass_sound') and self.glass_sound:
+                                self.glass_sound.play()
+                            self.pouring = True
+                            self.pour_animation_start = time.time()
+                            self.message = "Pouring your matcha..."
                             self.message_time = time.time()
                             return
-                        elif ingredient.name == "Bouillote" and self.has_matcha and not self.has_hot_water:
-                            print("Hot water clicked")  # Debug print
-                            if hasattr(self, 'water_sound') and self.water_sound:
-                                self.water_sound.play()
-                            self.create_water_animation()
-                            self.bowl.contents.append('water')
-                            self.has_hot_water = True
-                            self.message = "Hot water added! Now mix with the whisk."
-                            self.message_time = time.time()
+
+                    # Handle next button
+                    if self.is_poured and hasattr(self, 'next_button'):
+                        if self.next_button.is_clicked(mouse_pos):
+                            self.score += 1  # Increment score before saving
+                            self.save_score()  # Save the score
+                            self.reset_game()  # Reset the game
                             return
-                        elif ingredient.name == "Almond Milk" and self.is_mixed_with_water and not self.has_almond_milk:
-                            print("Almond milk clicked")  # Debug print
-                            # Stop whisk sound if it's playing
-                            if hasattr(self, 'whisk_sound') and self.whisk_sound:
-                                self.whisk_sound.stop()
-                            # Play milk sound if available
-                            if hasattr(self, 'milk_sound') and self.milk_sound:
-                                self.milk_sound.play()
-                            # Create milk pouring animation
-                            self.create_milk_animation()
-                            self.bowl.contents.append('milk')
-                            self.has_almond_milk = True
-                            self.message = "Almond milk added! Mix again to complete."
-                            self.message_time = time.time()
-                            return
+
+                    # Handle ingredients
+                    for ingredient in self.ingredients:
+                        if ingredient.is_clicked(mouse_pos) and ingredient.visible:
+                            # Matcha powder
+                            if ingredient.name == "Matcha" and not self.has_matcha:
+                                self.create_matcha_powder_animation()
+                                self.bowl.contents.append('matcha')
+                                self.has_matcha = True
+                                self.message = "Matcha added! Now add hot water."
+                                self.message_time = time.time()
+                                return
+                            # Hot water
+                            elif ingredient.name == "Bouillote" and self.has_matcha and not self.has_hot_water:
+                                if hasattr(self, 'water_sound') and self.water_sound:
+                                    self.water_sound.play()
+                                self.create_water_animation()
+                                self.bowl.contents.append('water')
+                                self.has_hot_water = True
+                                self.message = "Hot water added! Now mix with the whisk."
+                                self.message_time = time.time()
+                                return
+                            # Almond milk
+                            elif ingredient.name == "Almond Milk" and self.is_mixed_with_water and not self.has_almond_milk:
+                                if hasattr(self, 'milk_sound') and self.milk_sound:
+                                    self.milk_sound.play()
+                                self.create_milk_animation()
+                                self.bowl.contents.append('milk')
+                                self.has_almond_milk = True
+                                self.message = "Almond milk added! Mix again to complete."
+                                self.message_time = time.time()
+                                return
     def update_game_state(self):
         # Update animations, timers, etc.
         self.update_pour_animation()
@@ -388,45 +515,55 @@ class MatchaGame:
                 self.recipe_complete = True
 
     def reset_game(self):
-        # Reset game state for a new matcha
-        self.setup_bowl()
-        self.pouring = False
-        self.pour_progress = 0.0
-        self.glass_ready = False
-        self.can_click_glass = False
+        # Sauvegarder le score avant de reset
+        if self.score > 0 and hasattr(self, 'player_name') and self.player_name:
+            print(f"Saving score for {self.player_name}: {self.score}")
+            self.save_score()
 
-        # Reset recipe status with proper flow
+        # Arrêter tous les sons
+        if hasattr(self, 'whisk_sound') and self.whisk_sound:
+            self.whisk_sound.stop()
+        if hasattr(self, 'milk_sound') and self.milk_sound:
+            self.milk_sound.stop()
+        if hasattr(self, 'water_sound') and self.water_sound:
+            self.water_sound.stop()
+        if hasattr(self, 'glass_sound') and self.glass_sound:
+            self.glass_sound.stop()
+
+        # Réinitialiser les états du jeu
         self.has_matcha = False
         self.has_hot_water = False
-        self.is_mixed_with_water = False
         self.has_almond_milk = False
+        self.is_mixed_with_water = False
         self.is_fully_mixed = False
         self.is_poured = False
+        self.pouring = False
+        self.glass_ready = False
         self.recipe_complete = False
 
-        # Make ingredients visible again - keep this to ensure everything resets properly
-        for ingredient in self.ingredients:
-            ingredient.visible = True
+        # Réinitialiser le bol et les contenus
+        self.bowl.contents = []
+        self.bowl.is_stirred = False
+
+        # Réinitialiser les animations
+        self.milk_particles = []
+        self.is_milk_falling = False
 
         self.message = "Start by adding matcha powder to the bowl!"
         self.message_time = time.time()
 
+
     def run(self):
+        self.game_state = "name_input"  # Force start with name input
+
         while self.running:
-            # Update game state
-            if self.game_state == "game_screen":
+            if self.game_state == "name_input":
+                self.draw_name_input_screen()
+            elif self.game_state == "game_screen":
                 self.update_game_state()
-
-            # Handle events
-            self.handle_events()
-
-            # Draw appropriate screen
-            if self.game_state == "start_screen":
-                self.draw_start_screen()
-            else:
                 self.draw_game_screen()
 
-            # Update display
+            self.handle_events()
             pygame.display.flip()
             self.clock.tick(60)
     def draw_start_screen(self):
@@ -453,6 +590,10 @@ class MatchaGame:
             self.screen.blit(self.background_image, (0, 0))
         else:
             self.screen.fill(self.WHITE)
+
+        if self.game_over or self.recipe_complete:
+            if hasattr(self, 'restart_button'):
+                self.restart_button.draw(self.screen)
 
         # Draw all game elements
         self.bowl.draw(self.screen)
@@ -494,11 +635,9 @@ class MatchaGame:
         self.screen.blit(score_text, (10, 10))
         self.screen.blit(time_text, (self.SCREEN_WIDTH - 100, 10))
 
-
     def setup_buttons(self):
-        # Define button class
         class Button:
-            def __init__(self, x, y, width, height, text, color, hover_color):
+            def __init__(self, x, y, width, height, text, color, hover_color, font_size=32):
                 self.x = x
                 self.y = y
                 self.width = width
@@ -507,58 +646,74 @@ class MatchaGame:
                 self.color = color
                 self.hover_color = hover_color
                 self.current_color = color
-                self.water_particles = []
-                self.is_water_falling = False
-                self.water_fall_start_time = 0
-                self.water_fall_duration = 1.5  # seconds
-                self.milk_particles = []
-                self.is_milk_falling = False
-                self.milk_fall_start_time = 0
-                self.milk_fall_duration = 1.5  # seconds
+                self.font_size = font_size
+                self.rect = pygame.Rect(x, y, width, height)
 
             def draw(self, screen):
+                # Draw shadow
+                shadow_rect = pygame.Rect(self.x + 3, self.y + 3, self.width, self.height)
+                pygame.draw.rect(screen, (100, 100, 100), shadow_rect, border_radius=15)
 
 
-                font = pygame.font.SysFont(None, 28)
-                text_surf = font.render(self.text, True, (0, 0, 0))
+
+                # Draw main button with gradient effect
+                pygame.draw.rect(screen, self.current_color, self.rect, border_radius=15)
+
+                # Draw inner highlight
+                highlight_rect = pygame.Rect(self.x + 3, self.y + 3, self.width - 6, self.height // 2 - 3)
+                pygame.draw.rect(screen, (*[min(255, c + 30) for c in self.current_color[:3]], 150),
+                                 highlight_rect, border_radius=15)
+
+                # Draw border
+                pygame.draw.rect(screen, (60, 100, 60), self.rect, 2, border_radius=15)
+
+                # Add button text with shadow
+                font = pygame.font.SysFont('arial', self.font_size, bold=True)
+
+                # Text shadow
+                text_shadow = font.render(self.text, True, (50, 80, 50))
+                text_shadow_rect = text_shadow.get_rect(center=(self.x + self.width // 2 + 2,
+                                                                self.y + self.height // 2 + 2))
+                screen.blit(text_shadow, text_shadow_rect)
+
+                # Main text
+                text_surf = font.render(self.text, True, (255, 255, 255))
                 text_rect = text_surf.get_rect(center=(self.x + self.width // 2,
                                                        self.y + self.height // 2))
                 screen.blit(text_surf, text_rect)
 
             def is_clicked(self, pos):
-                click_rect = pygame.Rect(self.x, self.y, self.width, self.height)
-                return click_rect.collidepoint(pos)
+                return self.rect.collidepoint(pos)
 
             def update(self, mouse_pos):
-                if self.is_clicked(mouse_pos):
+                if self.rect.collidepoint(mouse_pos):
                     self.current_color = self.hover_color
                 else:
                     self.current_color = self.color
 
-        # Store Button class
-        self.Button = Button
-
-        # Create button instances
+        # Create pour button with new style
         self.pour_button = Button(
-            x=400,
+            x=self.SCREEN_WIDTH // 2 - 75,  # Centered horizontally
             y=450,
             width=150,
-            height=50,
+            height=60,  # Slightly taller
             text="Pour Matcha",
-            color=(200, 220, 200),
-            hover_color=(180, 210, 180)
+            color=(76, 175, 80),  # Material Design green
+            hover_color=(56, 142, 60),  # Darker green when hovered
+            font_size=36
         )
 
+        # Create next button (keeping similar style)
         self.next_button = Button(
-            x=400,
+            x=self.SCREEN_WIDTH // 2 - 75,
             y=450,
             width=150,
-            height=50,
+            height=60,
             text="Next Matcha",
-            color=(200, 220, 200),
-            hover_color=(180, 210, 180)
+            color=(76, 175, 80),
+            hover_color=(56, 142, 60),
+            font_size=36
         )
-
     def create_matcha_powder_animation(self):
         self.matcha_particles = []
         start_x = self.bowl.x + self.bowl.width // 2
@@ -788,6 +943,7 @@ class MatchaGame:
                     particle['life'] -= 0.05
                     particle['alpha'] = max(0, particle['alpha'] - 5)
 
+
     def create_splash(self, x, y):
         # Create 3-7 splash particles at impact point
         for _ in range(random.randint(3, 7)):
@@ -803,3 +959,83 @@ class MatchaGame:
                 'is_splash': True
             }
             self.milk_particles.append(splash)
+
+    def draw_pouring_animation(self):
+        if not self.pouring:
+            return
+
+        current_time = time.time()
+        elapsed = current_time - self.pour_animation_start
+
+        # Calculer la progression
+        self.pour_progress = min(elapsed / self.pour_animation_duration, 1.0)
+
+        # Dessiner le verre avec le niveau de remplissage
+        if self.glass:
+            self.glass.draw(self.screen, fill_level=self.pour_progress)
+
+        # Quand l'animation est terminée
+        if self.pour_progress >= 1.0:
+            self.pouring = False
+            self.is_poured = True
+            self.glass_ready = True
+            # Arrêter le son de versement
+            if hasattr(self, 'pour_sound') and self.pour_sound:
+                self.pour_sound.stop()
+            self.message = "Matcha poured! Click 'Next Matcha' to make another."
+            self.message_time = time.time()
+            self.recipe_complete = True
+
+    def update_score(self, points):
+        self.score += points
+        print(f"Score updated: {self.score}")
+
+    def restart_game(self):
+        # Reset game state
+        self.game_state = "name_input"
+        self.name_input = ""
+        self.player_name = ""
+        self.score = 0
+        self.time_left = 60
+        self.game_over = False
+
+        # Reset gameplay elements
+        self.has_matcha = False
+        self.has_hot_water = False
+        self.has_almond_milk = False
+        self.is_mixed_with_water = False
+        self.is_fully_mixed = False
+        self.is_poured = False
+        self.pouring = False
+        self.glass_ready = False
+        self.recipe_complete = False
+
+        # Reset animations
+        self.matcha_particles = []
+        self.water_particles = []
+        self.milk_particles = []
+        self.is_matcha_falling = False
+        self.is_water_falling = False
+        self.is_milk_falling = False
+
+        # Reset bowl
+        self.bowl.contents = []
+        self.bowl.is_stirred = False
+
+        # Reset message
+        self.message = ""
+        self.message_time = time.time()
+
+        # Create restart button
+        self.restart_button = Button(
+            x=self.SCREEN_WIDTH // 2 - 75,
+            y=500,  # Below other buttons
+            width=150,
+            height=60,
+            text="New Game",
+            color=(76, 175, 80),
+            hover_color=(56, 142, 60),
+            font_size=36
+        )
+
+

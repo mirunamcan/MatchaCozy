@@ -1,19 +1,39 @@
 import pygame
+import os
+
 
 class Ingredient:
-    def __init__(self, name, color, x, y, width, height):
+    def __init__(self, x, y, width, height, name, base_dir, image_path=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
         self.name = name
-        self.color = color
-        self.rect = pygame.Rect(x, y, width, height)
-        self.selected = False
+        self.visible = True
+        self.image = None
+        self.base_dir = base_dir
 
+        if image_path:
+            try:
+                full_path = os.path.join(self.base_dir, image_path)
+                print(f"Loading {name} image from: {full_path}")  # Debug print
+                if os.path.exists(full_path):
+                    print(f"File exists for {name}")  # Debug print
+                    self.image = pygame.image.load(full_path).convert_alpha()
+                    self.image = pygame.transform.scale(self.image, (width, height))
+                    print(f"Successfully loaded {name} image")  # Debug print
+                else:
+                    print(f"File not found: {full_path}")  # Debug print
+                    self.image = None
+            except Exception as e:
+                print(f"Error loading {name} image: {e}")  # Debug print
+                self.image = None
     def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect)
-        pygame.draw.rect(screen, (0, 0, 0), self.rect, 2)
-        font = pygame.font.SysFont(None, 20)
-        text_surf = font.render(self.name, True, (0, 0, 0))
-        text_rect = text_surf.get_rect(center=self.rect.center)
-        screen.blit(text_surf, text_rect)
+        if self.visible:
+            screen.blit(self.image, (self.x, self.y))
+            # Text rendering completely removed
 
     def is_clicked(self, pos):
+        if not self.visible:
+            return False
         return self.rect.collidepoint(pos)

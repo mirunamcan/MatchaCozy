@@ -1,16 +1,13 @@
 import pygame
-import sys
 from objects.game import MatchaGame
 
-# Initialize pygame
-pygame.init()
+def main():
+    pygame.init()
+    game = MatchaGame()
+    game.game_state = "start_screen"  # Set initial state explicitly
+    game.running = True  # Make sure running is True
+    game.run()
+    pygame.quit()
 
 if __name__ == "__main__":
-    game = MatchaGame()
-    try:
-        game.run()
-    except Exception as e:
-        print(f"Error occurred: {e}")
-    finally:
-        pygame.quit()
-        sys.exit()
+    main()

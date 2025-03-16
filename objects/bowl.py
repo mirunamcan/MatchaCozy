@@ -1,69 +1,58 @@
+import os
 import pygame
+import time
+import math
+import random
+
 
 class Bowl:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, 150, 80)
-        self.ingredients = []
-        self.stirred = False
-        self.WHITE = (255, 255, 255)
-        self.BLACK = (0, 0, 0)
-        self.DARK_GREEN = (56, 142, 60)
+    def __init__(self, x, y, width=400, height=250):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.contents = []
+        self.is_stirred = False
 
+        # Load bowl image
+        try:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            bowl_path = os.path.join(base_dir, 'assets', 'bowl.png')
+            self.image = pygame.image.load(bowl_path).convert_alpha()
+            self.image = pygame.transform.scale(self.image, (width, height))
+        except Exception as e:
+            print(f"Error loading bowl image: {e}")
+            self.image = None
+            # Create a fallback image
+            self.image = pygame.Surface((self.width, self.height))
+            self.image.fill((200, 150, 100))
+
+        # Milk surface
+        self.milk_image = pygame.Surface((self.width - 40, self.height - 20), pygame.SRCALPHA)
+        self.milk_image.fill((240, 240, 230, 200))  # Off-white with transparency
+
+        # Matcha powder surface - USES PARTICLE SYSTEM INSTEAD OF SOLID COLOR
+        self.matcha_image = pygame.Surface((self.width - 40, self.height - 20), pygame.SRCALPHA)
+        # Don't fill with solid color - draw particles instead
+        self.draw_matcha_powder(self.matcha_image)
+
+        # Mixed matcha surface
+        self.mixed_image = pygame.Surface((self.width - 40, self.height - 20), pygame.SRCALPHA)
+        self.mixed_image.fill((180, 210, 150, 200))  # Light green with transparency
     def draw(self, screen):
-        # Draw the bowl
-        pygame.draw.ellipse(screen, self.WHITE, self.rect)
-        pygame.draw.ellipse(screen, self.BLACK, self.rect, 2)
+        # First draw the bowl image
+        screen.blit(self.image, (self.x, self.y))
 
-        # Draw content based on ingredients
-        has_almond_milk = any(i.name == "Almond Milk" for i in self.ingredients)
-        has_matcha = any(i.name == "Matcha Powder" for i in self.ingredients)
 
-        if has_matcha or has_almond_milk:
-            content_color = self.get_content_color()
-            content_rect = pygame.Rect(
-                self.rect.x + 10,
-                self.rect.y + 20,
-                self.rect.width - 20,
-                self.rect.height - 30
-            )
-            pygame.draw.ellipse(screen, content_color, content_rect)
-
-            # Show stirring pattern if stirred
-            if self.stirred and has_matcha and has_almond_milk:
-                for i in range(3):
-                    pygame.draw.arc(
-                        screen,
-                        self.DARK_GREEN,
-                        content_rect,
-                        0.3 * i,
-                        0.3 * i + 0.9,
-                        2
-                    )
-
-            # Show matcha powder sprinkles if only matcha is added
-            elif has_matcha and not has_almond_milk:
-                for i in range(8):
-                    x = self.rect.x + 20 + (i * 15) % (self.rect.width - 40)
-                    y = self.rect.y + 25 + (i * 7) % (self.rect.height - 40)
-                    pygame.draw.circle(screen, self.DARK_GREEN, (x, y), 3)
-
-    def get_content_color(self):
-        has_almond_milk = any(i.name == "Almond Milk" for i in self.ingredients)
-        has_matcha = any(i.name == "Matcha Powder" for i in self.ingredients)
-
-        if has_almond_milk and has_matcha and self.stirred:
-            return (200, 230, 201)  # Light matcha green
-        elif has_almond_milk and has_matcha and not self.stirred:
-            return (230, 230, 200)  # Unmixed color
-        elif has_almond_milk:
-            return (240, 240, 230)  # Milk color
-        elif has_matcha:
-            return self.DARK_GREEN  # Matcha color
-        else:
-            return self.WHITE  # Empty
-
-    def add_ingredient(self, ingredient):
-        self.ingredients.append(ingredient)
+    def draw_matcha_powder(self, surface):
+        # Use a solid color with transparency instead of particles
+        color = (75, 139, 59, 100)  # Light green with high transparency
 
     def is_clicked(self, pos):
-        return self.rect.collidepoint(pos)
+        click_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+        return click_rect.collidepoint(pos)
+
+    def stop_milk_sound(self):
+        # This method will be called when mixer is clicked
+        if 'milk' in self.contents and hasattr(self, 'milk_sound') and self.milk_sound.get_busy():
+            self.milk_sound.stop()
